@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Label Generator</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;margin:18px;display:flex;flex-direction:column;align-items:center}
+    form{width:100%;max-width:900px}
+    label{display:block;margin:6px 0}
+    input[type="text"],input[type="number"],select{width:100%;padding:6px;box-sizing:border-box}
+    .button-row{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
+    .advanced{display:none;border:1px solid #ddd;padding:10px;border-radius:6px;margin-top:8px}
+    .label-block{border:1px solid #eee;padding:8px;margin:8px 0;border-radius:6px}
+    #allPreviews{margin-top:10px}
+    #previewCanvas{border:1px solid #ccc;border-radius:4px;max-width:100%}
+    .preview-controls{width:100%;max-width:900px;margin:8px 0;display:flex;align-items:center;gap:10px}
+    .panel{width:100%;max-width:900px;border:1px solid #ddd;border-radius:6px;padding:12px;margin:8px 0;box-sizing:border-box}
+    .panel h3{margin-top:0;margin-bottom:6px}
+    .panel-note{font-size:0.85em;color:#555;margin:4px 0 8px}
+    #csvStatus{margin-top:6px;font-size:0.9em;color:#333}
+    #csvStatus.ok{color:green}
+    #csvStatus.err{color:red}
+    .hole-grid{display:grid;grid-template-columns:repeat(3,80px);grid-template-rows:repeat(2,34px);gap:4px;margin-top:6px}
+    .hole-grid label{margin:0;display:flex;align-items:center;justify-content:center;border:1px solid #ccc;border-radius:4px;font-size:0.82em;cursor:pointer;padding:2px 4px;text-align:center;background:#f9f9f9}
+    .hole-grid label:has(input:checked){background:#d0eaff;border-color:#4a90d9}
+  </style>
+</head>
+<body>
+<h2>Label Generator v1.35</h2>
+<p style="max-width:900px;text-align:center">
+  Upload a saved CSV or fill in label details below — preview updates live as you adjust settings.
+</p>
+
+<!-- ── 1. File Upload ── -->
+<div class="panel">
+  <h3>1. File Upload</h3>
+  <p class="panel-note">
+    Upload a saved settings CSV to restore a full session (all settings plus label text).
+  </p>
+  <label>Upload CSV to restore session:
+    <input type="file" id="csvFile" accept=".csv,text/csv">
+  </label>
+  <button type="button" id="csvImportBtn">Import CSV</button>
+  <div id="csvStatus"></div>
+</div>
+<!-- ── End File Upload ── -->
+
+<!-- ── 2. ZIP Folder Name ── -->
+<div class="panel">
+  <h3>2. ZIP / CSV File Name</h3>
+  <p class="panel-note">Labels are for: <em>(appended to today's date in the file name)</em></p>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <span id="datePrefixDisplay" style="font-family:monospace;font-size:0.95em"></span>
+    <input id="recipientName" type="text" placeholder="e.g. Kate" style="width:200px">
+    <span id="folderPreview" style="font-size:0.85em;color:#555"></span>
+  </div>
+</div>
+
+<!-- ── 3. Hole Position ── -->
+<div class="panel">
+  <h3>3. Hole Position</h3>
+  <p class="panel-note">Select one or more positions. PNG preview: white filled circle. SVG export: unfilled green circle.</p>
+  <div class="hole-grid">
+    <label><input type="checkbox" name="hole" value="top-left"> Top Left</label>
+    <label><input type="checkbox" name="hole" value="top-middle" checked> Top Middle</label>
+    <label><input type="checkbox" name="hole" value="top-right"> Top Right</label>
+    <label><input type="checkbox" name="hole" value="bottom-left"> Bottom Left</label>
+    <label><input type="checkbox" name="hole" value="bottom-middle"> Bottom Middle</label>
+    <label><input type="checkbox" name="hole" value="bottom-right"> Bottom Right</label>
+  </div>
+</div>
+
+<!-- ── 4. Export Options + Advanced Format ── -->
+<div class="panel">
+  <h3>4. Export Options</h3>
+  <div class="button-row" style="margin-bottom:8px">
+    <button id="downloadBtn" type="button">Download engraving instruction file (JSON)</button>
+    <button id="downloadSvgBtn" type="button">Download SVGs as ZIP</button>
+    <button type="button" id="downloadSettingsCsvBtn">Download current settings CSV</button>
+    <button type="button" id="downloadTemplateBtn">Download blank template CSV</button>
+  </div>
+  <button id="toggleAdvanced" type="button">Show Advanced Options</button>
+  <div class="advanced" id="advancedOptions">
+
+    <!-- Sizes -->
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:180px">
+        <label>Line 1 size: <span id="largeSizeLabel">54</span>
+          <input id="largeSize" type="range" min="20" max="100" value="54">
+        </label>
+      </div>
+      <div style="flex:1;min-width:180px">
+        <label>Line 2 size: <span id="smallSizeLabel">27</span>
+          <input id="smallSize" type="range" min="10" max="60" value="27">
+        </label>
+      </div>
+      <div style="flex:1;min-width:180px">
+        <label>Line 3 size: <span id="line3SizeLabel">27</span>
+          <input id="line3Size" type="range" min="10" max="60" value="27">
+        </label>
+        <label><input id="link23" type="checkbox" checked> Link line 3 size to line 2</label>
+        <label><input id="wrapLine3" type="checkbox" checked> Allow line 3 to wrap</label>
+      </div>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:180px">
+        <label>Line 4/5 size (corner): <span id="cornerSizeLabel">22</span>
+          <input id="cornerSize" type="range" min="6" max="40" value="22">
+        </label>
+      </div>
+      <div style="flex:1;min-width:180px">
+        <label>Line 6 size (bottom): <span id="bottomSizeLabel">18</span>
+          <input id="bottomSize" type="range" min="6" max="40" value="18">
+        </label>
+      </div>
+    </div>
+
+    <!-- Gaps / shift -->
+    <div style="margin-top:10px;display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:180px">
+        <label>Gap line1→line2: <span id="gap12Label">4</span>
+          <input id="gap12" type="range" min="0" max="20" value="4">
+        </label>
+      </div>
+      <div style="flex:1;min-width:180px">
+        <label>Gap line2→line3: <span id="gap23Label">3</span>
+          <input id="gap23" type="range" min="0" max="20" value="3">
+        </label>
+        <label><input id="linkGaps" type="checkbox"> Make gap2-3 = gap1-2</label>
+      </div>
+      <div style="flex:1;min-width:180px">
+        <label>Text vertical shift: <span id="textShiftLabel">0</span>
+          <input id="textShift" type="range" min="-20" max="20" value="0">
+        </label>
+      </div>
+    </div>
+
+    <!-- Fonts — per line -->
+    <div style="margin-top:10px;display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:180px">
+        <label>Line 1 font
+          <select id="font1">
+            <option selected>Arial</option><option>Times New Roman</option>
+            <option>Trebuchet MS</option><option>Century Gothic</option><option>Lucida Handwriting</option><option>Baskerville Old Face</option>
+          </select>
+        </label>
+        <label><input id="bold1" type="checkbox" checked> Bold</label>
+        <label><input id="italic1" type="checkbox"> Italic</label>
+      </div>
+      <div style="flex:1;min-width:180px">
+        <label>Line 2 font
+          <select id="font2">
+            <option selected>Arial</option><option>Times New Roman</option>
+            <option>Trebuchet MS</option><option>Century Gothic</option><option>Lucida Handwriting</option><option>Baskerville Old Face</option>
+          </select>
+        </label>
+        <label><input id="bold2" type="checkbox"> Bold</label>
+        <label><input id="italic2" type="checkbox" checked> Italic</label>
+      </div>
+      <div style="flex:1;min-width:180px">
+        <label>Line 3 font
+          <select id="font3">
+            <option selected>Arial</option><option>Times New Roman</option>
+            <option>Trebuchet MS</option><option>Century Gothic</option><option>Lucida Handwriting</option><option>Baskerville Old Face</option>
+          </select>
+        </label>
+        <label><input id="bold3" type="checkbox"> Bold</label>
+        <label><input id="italic3" type="checkbox"> Italic</label>
+      </div>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:180px">
+        <label>Line 4/5 font
+          <select id="font45">
+            <option selected>Arial</option><option>Times New Roman</option>
+            <option>Trebuchet MS</option><option>Century Gothic</option><option>Lucida Handwriting</option><option>Baskerville Old Face</option>
+          </select>
+        </label>
+        <label><input id="bold45" type="checkbox"> Bold</label>
+        <label><input id="italic45" type="checkbox"> Italic</label>
+      </div>
+      <div style="flex:1;min-width:180px">
+        <label>Line 6 font
+          <select id="font6">
+            <option selected>Arial</option><option>Times New Roman</option>
+            <option>Trebuchet MS</option><option>Century Gothic</option><option>Lucida Handwriting</option><option>Baskerville Old Face</option>
+          </select>
+        </label>
+        <label><input id="bold6" type="checkbox"> Bold</label>
+        <label><input id="italic6" type="checkbox"> Italic</label>
+      </div>
+    </div>
+
+  </div>
+</div>
+<!-- ── End Export Options ── -->
+
+<!-- ── 5. Preview ── -->
+<h3>5. Preview</h3>
+<div class="preview-controls">
+  <label style="margin:0">Preview columns:
+    <input id="previewCols" type="number" min="1" max="20" value="3" style="width:60px;display:inline;padding:4px">
+  </label>
+</div>
+<div id="allPreviews"><canvas id="previewCanvas" style="display:none"></canvas></div>
+
+<!-- ── 6. Editable List of All Labels ── -->
+<h3>6. Labels</h3>
+<form id="mainForm" onsubmit="return false;">
+  <div class="label-block">
+    <h4>Label 1 (Primary Label)</h4>
+    <label>Line 1 (centre, large): <input id="line1" type="text" value=""></label>
+    <label>Line 2 (centre, small): <input id="line2" type="text" value=""></label>
+    <label>Line 3 (centre, small): <input id="line3" type="text" value=""></label>
+    <label>Line 4 (top-left corner, beside hole): <input id="line4" type="text" value=""></label>
+    <label>Line 5 (top-right corner, beside hole): <input id="line5" type="text" value=""></label>
+    <label>Line 6 (bottom centre, ID/ref): <input id="line6" type="text" value=""></label>
+    <label>How many of this design? <input id="qty1" type="number" min="1" value="1" style="width:60px"></label>
+  </div>
+
+  <label>Total labels (including label 1): <input id="numLabels" type="number" min="1" value="1"></label>
+  <div id="labelsContainer"></div>
+
+  <div class="button-row" id="topButtons">
+    <button id="previewBtn" type="button">Preview Label(s)</button>
+  </div>
+</form>
+
+<script>
+'use strict';
+const mmToPx = mm => Math.round(mm * 3.78);
+const pxToMm = px => px / 3.78;
+
+/* ── Fonts list (must match <select> options) ── */
+const FONT_OPTIONS = ['Arial','Times New Roman','Trebuchet MS','Century Gothic','Lucida Handwriting','Baskerville Old Face'];
+
+/* ── Date / folder name ── */
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function getTodayParts(){ const d=new Date(); return {y:d.getFullYear(),m:MONTHS[d.getMonth()],day:d.getDate()}; }
+function getRecipient(){
+  return (document.getElementById('recipientName').value||'').trim().replace(/[^a-zA-Z0-9_\-]/g,'_');
+}
+function getZipName(){
+  const {y,m,day}=getTodayParts(); const rec=getRecipient();
+  return rec?`${y}_${m}_${day}_labels_${rec}.zip`:`${y}_${m}_${day}_labels.zip`;
+}
+function getCsvName(){
+  const {y,m,day}=getTodayParts(); const rec=getRecipient();
+  return rec?`${y}_${m}_${day}_csv_${rec}.csv`:`${y}_${m}_${day}_csv.csv`;
+}
+(function initDateDisplay(){
+  const {y,m,day}=getTodayParts();
+  document.getElementById('datePrefixDisplay').textContent=`${y}_${m}_${day}_labels_`;
+  const upd=()=>{
+    const rec=getRecipient();
+    document.getElementById('folderPreview').textContent=rec
+      ? `→ SVG ZIP: ${y}_${m}_${day}_labels_${rec}.zip  |  CSV: ${y}_${m}_${day}_csv_${rec}.csv  |  JSON: ${y}_${m}_${day}_labels_${rec}.json`
+      : `→ SVG ZIP: ${y}_${m}_${day}_labels.zip  |  CSV: ${y}_${m}_${day}_csv.csv  |  JSON: ${y}_${m}_${day}_labels.json`;
+  };
+  document.getElementById('recipientName').addEventListener('input',upd);
+  upd();
+})();
+
+/* ── Hole helpers ── */
+function isTopCentreOnly(){
+  const ch=[...document.querySelectorAll('input[name="hole"]:checked')].map(e=>e.value);
+  return ch.length===1 && ch[0]==='top-middle';
+}
+function getHolePositions(params){
+  const W=params.canvas.width_mm, H=params.canvas.height_mm;
+  const margin=params.canvas.circle_top_mm, r=params.canvas.circle_diameter_mm/2;
+  const checked=[...document.querySelectorAll('input[name="hole"]:checked')].map(e=>e.value);
+  const pos=[];
+  checked.forEach(p=>{
+    let cx,cy;
+    if(p==='top-left')      {cx=margin+r;   cy=margin+r;}
+    else if(p==='top-middle')    {cx=W/2;        cy=margin+r;}
+    else if(p==='top-right')     {cx=W-margin-r; cy=margin+r;}
+    else if(p==='bottom-left')   {cx=margin+r;   cy=H-margin-r;}
+    else if(p==='bottom-middle') {cx=W/2;        cy=H-margin-r;}
+    else if(p==='bottom-right')  {cx=W-margin-r; cy=H-margin-r;}
+    if(cx!==undefined) pos.push({cx,cy,r});
+  });
+  return pos;
+}
+
+/* ── DOM refs ── */
+const qty1           = document.getElementById('qty1');
+const previewBtn     = document.getElementById('previewBtn');
+const downloadBtn    = document.getElementById('downloadBtn');
+const toggleAdvancedBtn = document.getElementById('toggleAdvanced');
+const advancedOptions   = document.getElementById('advancedOptions');
+const numLabelsEl    = document.getElementById('numLabels');
+const labelsContainer= document.getElementById('labelsContainer');
+
+/* sliders */
+const largeSize  = document.getElementById('largeSize');
+const smallSize  = document.getElementById('smallSize');
+const line3Size  = document.getElementById('line3Size');
+const cornerSize = document.getElementById('cornerSize');
+const bottomSize = document.getElementById('bottomSize');
+const link23     = document.getElementById('link23');
+const wrapLine3  = document.getElementById('wrapLine3');
+const gap12      = document.getElementById('gap12');
+const gap23      = document.getElementById('gap23');
+const linkGaps   = document.getElementById('linkGaps');
+const textShift  = document.getElementById('textShift');
+/* fonts */
+const font1=document.getElementById('font1'); const bold1=document.getElementById('bold1'); const italic1=document.getElementById('italic1');
+const font2=document.getElementById('font2'); const bold2=document.getElementById('bold2'); const italic2=document.getElementById('italic2');
+const font3=document.getElementById('font3'); const bold3=document.getElementById('bold3'); const italic3=document.getElementById('italic3');
+const font45=document.getElementById('font45'); const bold45=document.getElementById('bold45'); const italic45=document.getElementById('italic45');
+const font6=document.getElementById('font6');  const bold6=document.getElementById('bold6');  const italic6=document.getElementById('italic6');
+/* slider labels */
+const largeSizeLabel  = document.getElementById('largeSizeLabel');
+const smallSizeLabel  = document.getElementById('smallSizeLabel');
+const line3SizeLabel  = document.getElementById('line3SizeLabel');
+const cornerSizeLabel = document.getElementById('cornerSizeLabel');
+const bottomSizeLabel = document.getElementById('bottomSizeLabel');
+const gap12Label      = document.getElementById('gap12Label');
+const gap23Label      = document.getElementById('gap23Label');
+const textShiftLabel  = document.getElementById('textShiftLabel');
+
+function updateNumericLabels(){
+  largeSizeLabel.textContent  = largeSize.value;
+  smallSizeLabel.textContent  = smallSize.value;
+  line3SizeLabel.textContent  = line3Size.value;
+  cornerSizeLabel.textContent = cornerSize.value;
+  bottomSizeLabel.textContent = bottomSize.value;
+  gap12Label.textContent      = gap12.value;
+  gap23Label.textContent      = gap23.value;
+  textShiftLabel.textContent  = textShift.value;
+}
+
+function renderLabelInputs(){
+  const n=Math.max(1,parseInt(numLabelsEl.value||1));
+  labelsContainer.innerHTML='';
+  for(let i=2;i<=n;i++){
+    const block=document.createElement('div');
+    block.className='label-block';
+    block.innerHTML=`
+      <h4>Label ${i}</h4>
+      <label>Line 1 (centre, large): <input class="multi1" type="text" value=""></label>
+      <label>Line 2 (centre, small): <input class="multi2" type="text" value=""></label>
+      <label>Line 3 (centre, small): <input class="multi3" type="text" value=""></label>
+      <label>Line 4 (top-left corner): <input class="multi4" type="text" value=""></label>
+      <label>Line 5 (top-right corner): <input class="multi5" type="text" value=""></label>
+      <label>Line 6 (bottom centre): <input class="multi6" type="text" value=""></label>
+      <label>How many of this design? <input class="qty" type="number" min="1" value="1" style="width:60px"></label>
+    `;
+    labelsContainer.appendChild(block);
+  }
+}
+
+/* ── collectData ── */
+function collectData(){
+  const cornerSz = parseFloat(cornerSize.value);
+  const bottomSz = parseFloat(bottomSize.value);
+  const line3Sz  = link23.checked ? parseFloat(smallSize.value) : parseFloat(line3Size.value);
+
+  const canvasCfg={width_mm:100,height_mm:75,corner_radius_mm:2,circle_diameter_mm:6,circle_top_mm:6,margin_side_mm:6,top_margin_extra_mm:10};
+  const globalCfg={
+    text_shift_mm:parseFloat(textShift.value||0),
+    gap12_mm:parseFloat(gap12.value||0),
+    gap23_mm:parseFloat(gap23.value||0),
+    linkGaps:linkGaps.checked,
+    linkLine3To2:link23.checked
+  };
+
+  const obj={
+    canvas:canvasCfg,
+    global:globalCfg,
+    sizes:{
+      line1_size:parseFloat(largeSize.value),
+      line2_size:parseFloat(smallSize.value),
+      line3_size:line3Sz,
+      corner_size:cornerSz,
+      bottom_size:bottomSz
+    },
+    fonts:{
+      line1:font1.value, line1_bold:bold1.checked, line1_italic:italic1.checked,
+      line2:font2.value, line2_bold:bold2.checked, line2_italic:italic2.checked,
+      line3:font3.value, line3_bold:bold3.checked, line3_italic:italic3.checked,
+      line45:font45.value, line45_bold:bold45.checked, line45_italic:italic45.checked,
+      line6:font6.value,  line6_bold:bold6.checked,  line6_italic:italic6.checked
+    },
+    holes:[...document.querySelectorAll('input[name="hole"]:checked')].map(e=>e.value),
+    position_info:{
+      line1_2_3:{layout:'centre_horizontal',vertical:'below_top_hole_if_top_centre_only_else_vertically_centred',max_width_mm:90},
+      line4:{layout:'top_left_corner',horizontal_centre:'W*0.25',vertical_centre:'circle_top_mm+circle_r_mm',max_width_mm:'W*0.5-4mm'},
+      line5:{layout:'top_right_corner',horizontal_centre:'W*0.75',vertical_centre:'circle_top_mm+circle_r_mm',max_width_mm:'W*0.5-4mm'},
+      line6:{layout:'bottom_centre',vertical_anchor:'Hpx-margin_side-size*0.15px',max_width_mm:90}
+    },
+    labels:[]
+  };
+
+  function mkLine(text,font,size,bold,italic){return {text:text||'',font,size,bold,italic};}
+
+  obj.labels.push({
+    name:'Label 1', qty:parseInt(qty1.value||1),
+    lines:{
+      line1:mkLine(document.getElementById('line1').value, font1.value,  obj.sizes.line1_size,  bold1.checked,  italic1.checked),
+      line2:mkLine(document.getElementById('line2').value, font2.value,  obj.sizes.line2_size,  bold2.checked,  italic2.checked),
+      line3:mkLine(document.getElementById('line3').value, font3.value,  obj.sizes.line3_size,  bold3.checked,  italic3.checked),
+      line4:mkLine(document.getElementById('line4').value, font45.value, cornerSz,              bold45.checked, italic45.checked),
+      line5:mkLine(document.getElementById('line5').value, font45.value, cornerSz,              bold45.checked, italic45.checked),
+      line6:mkLine(document.getElementById('line6').value, font6.value,  bottomSz,              bold6.checked,  italic6.checked)
+    }
+  });
+
+  const m1=document.querySelectorAll('.multi1'), m2=document.querySelectorAll('.multi2'),
+        m3=document.querySelectorAll('.multi3'), m4=document.querySelectorAll('.multi4'),
+        m5=document.querySelectorAll('.multi5'), m6=document.querySelectorAll('.multi6'),
+        mq=document.querySelectorAll('.qty');
+  for(let i=0;i<m1.length;i++){
+    obj.labels.push({
+      name:`Label ${i+2}`, qty:parseInt(mq[i].value||1),
+      lines:{
+        line1:mkLine(m1[i].value, font1.value,  obj.sizes.line1_size,  bold1.checked,  italic1.checked),
+        line2:mkLine(m2[i].value, font2.value,  obj.sizes.line2_size,  bold2.checked,  italic2.checked),
+        line3:mkLine(m3[i].value, font3.value,  obj.sizes.line3_size,  bold3.checked,  italic3.checked),
+        line4:mkLine(m4[i]?m4[i].value:'', font45.value, cornerSz, bold45.checked, italic45.checked),
+        line5:mkLine(m5[i]?m5[i].value:'', font45.value, cornerSz, bold45.checked, italic45.checked),
+        line6:mkLine(m6[i]?m6[i].value:'', font6.value,  bottomSz, bold6.checked,  italic6.checked)
+      }
+    });
+  }
+  return obj;
+}
+
+/* ── Word-wrap helper ── */
+/* Given a canvas context (with font already set), split text into lines
+   each no wider than maxWidthPx. Returns array of strings. */
+function wrapText(ctx, text, maxWidthPx){
+  if(!text||!text.trim()) return [''];
+  const words=text.split(' ');
+  const result=[];
+  let cur='';
+  for(const word of words){
+    const test=cur?cur+' '+word:word;
+    if(ctx.measureText(test).width<=maxWidthPx){
+      cur=test;
+    } else {
+      if(cur) result.push(cur);
+      cur=word;
+    }
+  }
+  if(cur) result.push(cur);
+  return result.length?result:[''];
+}
+
+/* ── Canvas drawing ── */
+function drawLabelToCanvas(labelObj,params){
+  const Wpx=mmToPx(params.canvas.width_mm), Hpx=mmToPx(params.canvas.height_mm);
+  const radius=mmToPx(params.canvas.corner_radius_mm);
+  const circleRPx=mmToPx(params.canvas.circle_diameter_mm/2);
+  const circleTopPx=mmToPx(params.canvas.circle_top_mm);
+  const marginSidePx=mmToPx(params.canvas.margin_side_mm);
+  const topExtraPx=mmToPx(params.canvas.top_margin_extra_mm);
+  const textShiftPx=mmToPx(params.global.text_shift_mm||0);
+  const gap12Px=mmToPx(params.global.gap12_mm||0);
+  const gap23Px=mmToPx(params.global.linkGaps?params.global.gap12_mm:params.global.gap23_mm||0);
+
+  const c=document.createElement('canvas'); c.width=Wpx; c.height=Hpx;
+  const ctx=c.getContext('2d');
+
+  /* background */
+  ctx.fillStyle='#000';
+  ctx.beginPath();
+  ctx.moveTo(radius,0); ctx.lineTo(Wpx-radius,0); ctx.quadraticCurveTo(Wpx,0,Wpx,radius);
+  ctx.lineTo(Wpx,Hpx-radius); ctx.quadraticCurveTo(Wpx,Hpx,Wpx-radius,Hpx);
+  ctx.lineTo(radius,Hpx); ctx.quadraticCurveTo(0,Hpx,0,Hpx-radius);
+  ctx.lineTo(0,radius); ctx.quadraticCurveTo(0,0,radius,0);
+  ctx.closePath(); ctx.fill();
+
+  /* holes */
+  getHolePositions(params).forEach(h=>{
+    ctx.beginPath();
+    ctx.arc(mmToPx(h.cx),mmToPx(h.cy),mmToPx(h.r),0,Math.PI*2);
+    ctx.fillStyle='#fff'; ctx.fill();
+  });
+
+  /* centre lines 1-3 */
+  // Build the raw line list (same as before)
+  const rawLines=[];
+  if(labelObj.lines.line1) rawLines.push(labelObj.lines.line1);
+  if(labelObj.lines.line2||labelObj.lines.line3) rawLines.push(labelObj.lines.line2);
+  if(labelObj.lines.line3&&labelObj.lines.line3.text.trim()!=='') rawLines.push(labelObj.lines.line3);
+
+  // Expand line 3 into wrapped sub-lines if option enabled
+  // A "line" entry can now have a subLines array for wrapped text
+  const lines=[];
+  const maxWpx=mmToPx(90);
+  rawLines.forEach((ln,i)=>{
+    const isLine3 = (i===rawLines.length-1) && (rawLines.length>1) && ln===labelObj.lines.line3;
+    if(isLine3 && wrapLine3.checked && ln.text && ln.text.trim()){
+      let fs=''; if(ln.italic)fs+='italic '; if(ln.bold)fs+='bold ';
+      fs+=`${ln.size}px ${ln.font||'Arial'}`;
+      ctx.font=fs;
+      const subs=wrapText(ctx,ln.text,maxWpx);
+      // Push first sub-line as the main entry, rest as extra entries with same style
+      subs.forEach((sub,si)=>{
+        lines.push({...ln, text:sub, _isWrapped:si>0});
+      });
+    } else {
+      lines.push(ln);
+    }
+  });
+
+  // Compute total height — wrapped sub-lines use the same gap between them as gap23
+  let totalH=0;
+  lines.forEach((ln,i)=>{
+    totalH+=ln.size;
+    if(i===0&&lines.length>1) totalH+=gap12Px;
+    if(i===1&&!ln._isWrapped&&lines.length>2) totalH+=gap23Px;
+    if(i>1&&ln._isWrapped&&i<lines.length-1) totalH+=Math.round(ln.size*0.2); // tight leading between wrapped subs
+    if(i>1&&ln._isWrapped&&i===lines.length-1){/* last wrapped line, no trailing gap */}
+    // Actually: between wrapped sub-lines, use a small leading (20% of font size)
+  });
+  // Redo totalH cleanly
+  totalH=0;
+  lines.forEach((ln,i)=>{
+    if(i>0){
+      if(i===1) totalH+=gap12Px; // gap after line1
+      else if(!lines[i]._isWrapped) totalH+=gap23Px; // gap before first line3
+      else totalH+=Math.round(ln.size*0.15); // tight leading between wrapped sub-lines
+    }
+    totalH+=ln.size;
+  });
+
+  let startY;
+  if(isTopCentreOnly()){
+    const topTextY=circleTopPx+circleRPx+topExtraPx+textShiftPx;
+    const avail=Hpx-marginSidePx-topTextY;
+    startY=topTextY+(avail-totalH)*0.55+(lines.length>0?lines[0].size*0.75:0);
+  } else {
+    startY=(Hpx-totalH)/2+(lines.length>0?lines[0].size*0.75:0)+textShiftPx;
+  }
+
+  ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+  lines.forEach((ln,i)=>{
+    let fs=''; if(ln.italic)fs+='italic '; if(ln.bold)fs+='bold ';
+    fs+=`${ln.size}px ${ln.font||'Arial'}`;
+    ctx.font=fs;
+    // For wrapped sub-lines, no horizontal compression — each sub-line fits within maxW by design
+    const meas=ctx.measureText(ln.text).width;
+    const sx=ln._isWrapped ? 1 : Math.min(1,maxWpx/(meas||1));
+    if(sx<1){ctx.save();ctx.translate(Wpx/2,startY);ctx.scale(sx,1);ctx.fillText(ln.text,0,0);ctx.restore();}
+    else ctx.fillText(ln.text,Wpx/2,startY);
+    // Advance Y
+    if(i<lines.length-1){
+      const next=lines[i+1];
+      if(i===0) startY+=gap12Px+lines[1].size;        // gap after line1
+      else if(!next._isWrapped) startY+=gap23Px+next.size; // gap before first line3
+      else startY+=Math.round(ln.size*0.15)+next.size;      // tight leading between sub-lines
+    }
+  });
+
+  /* corner / bottom lines */
+  const holeMarg=params.canvas.circle_top_mm, holeR=params.canvas.circle_diameter_mm/2;
+  const holeCy_px=mmToPx(holeMarg+holeR);
+  const buf2px=mmToPx(2); // 2mm buffer from edge and from hole
+
+  function drawCornerText(text,ln,cx,cy,maxWpx){
+    if(!text||text.trim()==='') return;
+    let fs=''; if(ln.italic)fs+='italic '; if(ln.bold)fs+='bold ';
+    fs+=`${ln.size}px ${ln.font||'Arial'}`;
+    ctx.font=fs; ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    const meas=ctx.measureText(text).width, sx=Math.min(1,maxWpx/(meas||1));
+    if(sx<1){ctx.save();ctx.translate(cx,cy);ctx.scale(sx,1);ctx.fillText(text,0,0);ctx.restore();}
+    else ctx.fillText(text,cx,cy);
+  }
+
+  // Line 4/5 zones reference the top-CENTRE hole position (W/2 ± holeR),
+  // regardless of which holes are actually drawn — this matches "in line with
+  // the hole" vertically and "between the hole and the edge" horizontally.
+  const centreHoleLeftPx  = mmToPx(params.canvas.width_mm/2 - holeR);
+  const centreHoleRightPx = mmToPx(params.canvas.width_mm/2 + holeR);
+
+  // Line 4: left zone — from (label left edge + 2mm) to (centre-hole left edge - 2mm)
+  if(labelObj.lines.line4&&labelObj.lines.line4.text.trim()!==''){
+    const zoneLeft4=buf2px;
+    const zoneRight4=centreHoleLeftPx-buf2px;
+    const zoneW4=Math.max(1,zoneRight4-zoneLeft4);
+    const zoneCx4=(zoneLeft4+zoneRight4)/2;
+    drawCornerText(labelObj.lines.line4.text, labelObj.lines.line4, zoneCx4, holeCy_px, zoneW4);
+  }
+  // Line 5: right zone — mirror: from (centre-hole right edge + 2mm) to (label right edge - 2mm)
+  if(labelObj.lines.line5&&labelObj.lines.line5.text.trim()!==''){
+    const zoneLeft5=centreHoleRightPx+buf2px;
+    const zoneRight5=Wpx-buf2px;
+    const zoneW5=Math.max(1,zoneRight5-zoneLeft5);
+    const zoneCx5=(zoneLeft5+zoneRight5)/2;
+    drawCornerText(labelObj.lines.line5.text, labelObj.lines.line5, zoneCx5, holeCy_px, zoneW5);
+  }
+  // Line 6: bottom centre
+  if(labelObj.lines.line6&&labelObj.lines.line6.text.trim()!==''){
+    const ln6=labelObj.lines.line6, baseY=Hpx-marginSidePx-ln6.size*0.15;
+    let fs=''; if(ln6.italic)fs+='italic '; if(ln6.bold)fs+='bold ';
+    fs+=`${ln6.size}px ${ln6.font||'Arial'}`;
+    ctx.font=fs; ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+    const maxW=mmToPx(90), meas=ctx.measureText(ln6.text).width, sx=Math.min(1,maxW/(meas||1));
+    if(sx<1){ctx.save();ctx.translate(Wpx/2,baseY);ctx.scale(sx,1);ctx.fillText(ln6.text,0,0);ctx.restore();}
+    else ctx.fillText(ln6.text,Wpx/2,baseY);
+  }
+
+  return c;
+}
+
+/* ── Preview grid ── */
+function previewLabels(){
+  const data=collectData();
+  const cols=Math.max(1,parseInt(document.getElementById('previewCols').value||1));
+  const labelCanvases=data.labels.map(lbl=>({name:lbl.name,qty:lbl.qty,c:drawLabelToCanvas(lbl,data)}));
+  if(!labelCanvases.length) return;
+  const labelW=labelCanvases[0].c.width, labelH=labelCanvases[0].c.height;
+  const gapPx=mmToPx(5), namePad=22, rows=Math.ceil(labelCanvases.length/cols);
+  const totalW=cols*labelW+(cols-1)*gapPx, totalH=rows*(labelH+namePad)+(rows-1)*gapPx;
+  const pc=document.getElementById('previewCanvas');
+  pc.width=totalW; pc.height=totalH; pc.style.display='block';
+  const dispW=Math.min(900,totalW);
+  pc.style.width=dispW+'px'; pc.style.height=(totalH*dispW/totalW)+'px';
+  const ctx=pc.getContext('2d'); ctx.clearRect(0,0,totalW,totalH);
+  labelCanvases.forEach((item,idx)=>{
+    const col=idx%cols, row=Math.floor(idx/cols);
+    const x=col*(labelW+gapPx), y=row*(labelH+namePad+gapPx);
+    ctx.drawImage(item.c,x,y);
+    ctx.fillStyle='#333'; ctx.font='13px Arial'; ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText(`${item.name} — ${item.qty} cop${item.qty!==1?'ies':'y'}`,x+labelW/2,y+labelH+4);
+  });
+}
+
+/* ── JSON download ── */
+function downloadJson(){
+  const data=collectData();
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const {y,m,day}=getTodayParts(); const rec=getRecipient();
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=rec?`${y}_${m}_${day}_labels_${rec}.json`:`${y}_${m}_${day}_labels.json`;
+  a.click();
+}
+
+/* ═══════════════════════════════════════════════════════
+   CSV SYSTEM
+   The CSV has two sections separated by a blank line:
+
+   Section 1 — Settings (key,value pairs, one per row):
+     setting_name,value
+
+   Section 2 — Labels (tabular):
+     label_num,copies,line1,line2,line3,line4,line5,line6
+
+   A [settings] marker row starts section 1.
+   A [labels] marker row starts section 2.
+═══════════════════════════════════════════════════════ */
+
+/* All setting keys in canonical order */
+const SETTING_DEFS = [
+  ['line1_size',    ()=>largeSize.value,         v=>{largeSize.value=v;}],
+  ['line2_size',    ()=>smallSize.value,         v=>{smallSize.value=v;}],
+  ['line3_size',    ()=>line3Size.value,         v=>{line3Size.value=v;}],
+  ['link_line3_to_line2', ()=>link23.checked?'true':'false', v=>{link23.checked=parseBool(v);}],
+  ['wrap_line3', ()=>wrapLine3.checked?'true':'false', v=>{wrapLine3.checked=parseBool(v);}],
+  ['corner_size',   ()=>cornerSize.value,        v=>{cornerSize.value=v;}],
+  ['bottom_size',   ()=>bottomSize.value,        v=>{bottomSize.value=v;}],
+  ['gap12',         ()=>gap12.value,             v=>{gap12.value=v;}],
+  ['gap23',         ()=>gap23.value,             v=>{gap23.value=v;}],
+  ['link_gaps',     ()=>linkGaps.checked?'true':'false', v=>{linkGaps.checked=parseBool(v);}],
+  ['text_vertical_shift', ()=>textShift.value,  v=>{textShift.value=v;}],
+  ['font_line1',    ()=>font1.value,             v=>{setSelect(font1,v);}],
+  ['bold_line1',    ()=>bold1.checked?'true':'false',    v=>{bold1.checked=parseBool(v);}],
+  ['italic_line1',  ()=>italic1.checked?'true':'false',  v=>{italic1.checked=parseBool(v);}],
+  ['font_line2',    ()=>font2.value,             v=>{setSelect(font2,v);}],
+  ['bold_line2',    ()=>bold2.checked?'true':'false',    v=>{bold2.checked=parseBool(v);}],
+  ['italic_line2',  ()=>italic2.checked?'true':'false',  v=>{italic2.checked=parseBool(v);}],
+  ['font_line3',    ()=>font3.value,             v=>{setSelect(font3,v);}],
+  ['bold_line3',    ()=>bold3.checked?'true':'false',    v=>{bold3.checked=parseBool(v);}],
+  ['italic_line3',  ()=>italic3.checked?'true':'false',  v=>{italic3.checked=parseBool(v);}],
+  ['font_lines45',  ()=>font45.value,            v=>{setSelect(font45,v);}],
+  ['bold_lines45',  ()=>bold45.checked?'true':'false',   v=>{bold45.checked=parseBool(v);}],
+  ['italic_lines45',()=>italic45.checked?'true':'false', v=>{italic45.checked=parseBool(v);}],
+  ['font_line6',    ()=>font6.value,             v=>{setSelect(font6,v);}],
+  ['bold_line6',    ()=>bold6.checked?'true':'false',    v=>{bold6.checked=parseBool(v);}],
+  ['italic_line6',  ()=>italic6.checked?'true':'false',  v=>{italic6.checked=parseBool(v);}],
+  ['holes',
+    ()=>[...document.querySelectorAll('input[name="hole"]:checked')].map(e=>e.value).join('|'),
+    v=>{
+      document.querySelectorAll('input[name="hole"]').forEach(cb=>{cb.checked=false;});
+      (v||'').split('|').filter(Boolean).forEach(val=>{
+        const cb=document.querySelector(`input[name="hole"][value="${val}"]`);
+        if(cb) cb.checked=true;
+      });
+    }
+  ]
+];
+
+function parseBool(v){ return v.toLowerCase()==='true'||v==='1'; }
+
+function setSelect(sel,val){
+  const opt=[...sel.options].find(o=>o.value===val||o.text===val);
+  if(opt) sel.value=opt.value;
+}
+
+function csvQuote(s){
+  s=String(s??'');
+  if(s.includes(',')||s.includes('"')||s.includes('\n')) return '"'+s.replace(/"/g,'""')+'"';
+  return s;
+}
+
+function buildSettingsCSV(){
+  const rows=[];
+  rows.push('[settings]');
+  rows.push('# Edit values in column B. Do not change column A keys.');
+  rows.push('# Fonts: Arial | Times New Roman | Trebuchet MS | Century Gothic | Lucida Handwriting | Baskerville Old Face');
+  rows.push('# Boolean values: true or false');
+  rows.push('# holes: pipe-separated list e.g. top-middle|top-left  (options: top-left top-middle top-right bottom-left bottom-middle bottom-right)');
+  SETTING_DEFS.forEach(([key,getter])=>{ rows.push(`${csvQuote(key)},${csvQuote(getter())}`); });
+  rows.push('');
+  rows.push('[labels]');
+  rows.push('# One row per label design. Columns: label_num,copies,line1,line2,line3,line4,line5,line6');
+  rows.push('label_num,copies,line1,line2,line3,line4,line5,line6');
+  return rows;
+}
+
+function buildLabelsCSVRows(){
+  const data=collectData();
+  return data.labels.map((lbl,i)=>[
+    i+1,
+    lbl.qty,
+    lbl.lines.line1.text,
+    lbl.lines.line2.text,
+    lbl.lines.line3.text,
+    lbl.lines.line4.text,
+    lbl.lines.line5.text,
+    lbl.lines.line6.text
+  ].map(csvQuote).join(','));
+}
+
+function downloadSettingsCSV(){
+  const rows=[...buildSettingsCSV(), ...buildLabelsCSVRows()];
+  const blob=new Blob([rows.join('\r\n')],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=getCsvName();
+  a.click();
+}
+
+function downloadTemplateCSV(){
+  const rows=[...buildSettingsCSV()];
+  // One blank example label row with placeholder text
+  rows.push(`1,1,Name Here,Line 2 text,Line 3 text,Left corner,Right corner,ID ref`);
+  const blob=new Blob([rows.join('\r\n')],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='label_template.csv';
+  a.click();
+}
+
+/* ── CSV import ── */
+function parseCSV(text){
+  const rawLines=text.split(/\r?\n/);
+  // Detect delimiter: if first non-blank line has a tab, use tab; otherwise comma
+  const firstData=rawLines.find(l=>l.trim()!=='');
+  const delim=(firstData&&firstData.includes('\t'))?'\t':',';
+  const rows=[];
+  for(const raw of rawLines){
+    if(raw.trim()===''){rows.push(null);continue;}
+    const cols=[]; let cur='', inQ=false;
+    for(let ci=0;ci<raw.length;ci++){
+      const ch=raw[ci];
+      if(delim===','&&ch==='"') inQ=!inQ;
+      else if(ch===delim&&!inQ){cols.push(cur.trim());cur='';}
+      else cur+=ch;
+    }
+    cols.push(cur.trim());
+    rows.push(cols);
+  }
+  return rows;
+}
+
+function applyCSV(rows){
+  /* find section markers */
+  let settingsStart=-1, labelsStart=-1;
+  rows.forEach((r,i)=>{
+    if(!r) return;
+    if(r[0]==='[settings]') settingsStart=i;
+    if(r[0]==='[labels]')   labelsStart=i;
+  });
+
+  /* apply settings */
+  if(settingsStart>=0){
+    const settingsMap={};
+    const end=labelsStart>=0?labelsStart:rows.length;
+    for(let i=settingsStart+1;i<end;i++){
+      const r=rows[i];
+      if(!r||r[0].startsWith('#')||r[0]==='') continue;
+      settingsMap[r[0].trim()]=r[1]?r[1].trim():'';
+    }
+    SETTING_DEFS.forEach(([key,,setter])=>{
+      if(settingsMap[key]!==undefined) setter(settingsMap[key]);
+    });
+    updateNumericLabels();
+  }
+
+  /* apply labels */
+  if(labelsStart>=0){
+    const dataRows=[];
+    for(let i=labelsStart+1;i<rows.length;i++){
+      const r=rows[i];
+      if(!r||r[0].startsWith('#')) continue;
+      if(r[0]==='label_num'||r[0]==='label_number') continue; // header row
+      if(r.length>=2 && !isNaN(parseInt(r[0]))) dataRows.push(r);
+    }
+    if(dataRows.length===0) throw new Error('No valid label rows found in [labels] section.');
+
+    numLabelsEl.value=dataRows.length;
+    renderLabelInputs();
+
+    const r0=dataRows[0];
+    qty1.value=parseInt(r0[1])||1;
+    ['line1','line2','line3','line4','line5','line6'].forEach((id,ci)=>{
+      document.getElementById(id).value=r0[ci+2]||'';
+    });
+
+    const m1=document.querySelectorAll('.multi1'), m2=document.querySelectorAll('.multi2'),
+          m3=document.querySelectorAll('.multi3'), m4=document.querySelectorAll('.multi4'),
+          m5=document.querySelectorAll('.multi5'), m6=document.querySelectorAll('.multi6'),
+          mq=document.querySelectorAll('.qty');
+    for(let i=1;i<dataRows.length;i++){
+      const r=dataRows[i];
+      if(mq[i-1]) mq[i-1].value=parseInt(r[1])||1;
+      [m1,m2,m3,m4,m5,m6].forEach((col,ci)=>{ if(col[i-1]) col[i-1].value=r[ci+2]||''; });
+    }
+  }
+}
+
+document.getElementById('csvImportBtn').addEventListener('click',()=>{
+  const fileInput=document.getElementById('csvFile');
+  const statusEl=document.getElementById('csvStatus');
+  statusEl.className=''; statusEl.textContent='';
+  const file=fileInput.files[0];
+  if(!file){statusEl.className='err';statusEl.textContent='Please select a CSV file first.';return;}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const rows=parseCSV(e.target.result);
+      applyCSV(rows);
+      statusEl.className='ok';
+      statusEl.textContent=`✓ Imported ${Math.max(1,parseInt(numLabelsEl.value||1))} label(s) with all settings.`;
+      previewLabels();
+    }catch(err){statusEl.className='err';statusEl.textContent=`Error: ${err.message}`;}
+  };
+  reader.onerror=()=>{statusEl.className='err';statusEl.textContent='Failed to read file.';};
+  reader.readAsText(file);
+});
+
+/* ── SVG generation — exact mirror of canvas renderer ── */
+function escSVG(s){
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+}
+
+function generateLabelSVG(labelObj,params){
+  /* Use the same px dimensions as the canvas so positions are identical */
+  const Wpx=mmToPx(params.canvas.width_mm), Hpx=mmToPx(params.canvas.height_mm);
+  const radius=mmToPx(params.canvas.corner_radius_mm);
+  const circleRPx=mmToPx(params.canvas.circle_diameter_mm/2);
+  const circleTopPx=mmToPx(params.canvas.circle_top_mm);
+  const marginSidePx=mmToPx(params.canvas.margin_side_mm);
+  const topExtraPx=mmToPx(params.canvas.top_margin_extra_mm);
+  const textShiftPx=mmToPx(params.global.text_shift_mm||0);
+  const gap12Px=mmToPx(params.global.gap12_mm||0);
+  const gap23Px=mmToPx(params.global.linkGaps?params.global.gap12_mm:params.global.gap23_mm||0);
+
+  /* Temporary canvas for text measurement — same as canvas renderer */
+  const mC=document.createElement('canvas'), mCtx=mC.getContext('2d');
+
+  /* Rounded-rect path for SVG (matches canvas quadraticCurveTo) */
+  const rr=radius;
+  const rectPath=`M${rr},0 L${Wpx-rr},0 Q${Wpx},0 ${Wpx},${rr} L${Wpx},${Hpx-rr} Q${Wpx},${Hpx} ${Wpx-rr},${Hpx} L${rr},${Hpx} Q0,${Hpx} 0,${Hpx-rr} L0,${rr} Q0,0 ${rr},0 Z`;
+
+  /* Holes — green outline, no fill */
+  const holes=getHolePositions(params);
+  const holeSVG=holes.map(h=>{
+    const cx=mmToPx(h.cx), cy=mmToPx(h.cy), r=mmToPx(h.r);
+    return `  <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#00cc00" stroke-width="1"/>`;
+  }).join('\n');
+
+  /* ── Centre lines 1-3 — mirror canvas wrap logic exactly ── */
+  const rawLinesSVG=[];
+  if(labelObj.lines.line1) rawLinesSVG.push(labelObj.lines.line1);
+  if(labelObj.lines.line2||labelObj.lines.line3) rawLinesSVG.push(labelObj.lines.line2);
+  if(labelObj.lines.line3&&labelObj.lines.line3.text.trim()!=='') rawLinesSVG.push(labelObj.lines.line3);
+
+  const maxWcenPx=mmToPx(90);
+  const lines=[];
+  rawLinesSVG.forEach((ln,i)=>{
+    const isLine3=(i===rawLinesSVG.length-1)&&(rawLinesSVG.length>1)&&ln===labelObj.lines.line3;
+    if(isLine3&&wrapLine3.checked&&ln.text&&ln.text.trim()){
+      let fs=''; if(ln.italic)fs+='italic '; if(ln.bold)fs+='bold '; fs+=`${ln.size}px ${ln.font||'Arial'}`;
+      mCtx.font=fs;
+      const subs=wrapText(mCtx,ln.text,maxWcenPx);
+      subs.forEach((sub,si)=>lines.push({...ln,text:sub,_isWrapped:si>0}));
+    } else {
+      lines.push(ln);
+    }
+  });
+
+  // Compute total height (identical to canvas)
+  let totalH=0;
+  lines.forEach((ln,i)=>{
+    if(i>0){
+      if(i===1) totalH+=gap12Px;
+      else if(!lines[i]._isWrapped) totalH+=gap23Px;
+      else totalH+=Math.round(ln.size*0.15);
+    }
+    totalH+=ln.size;
+  });
+
+  let startY;
+  if(isTopCentreOnly()){
+    const topTextY=circleTopPx+circleRPx+topExtraPx+textShiftPx;
+    const avail=Hpx-marginSidePx-topTextY;
+    startY=topTextY+(avail-totalH)*0.55+(lines.length>0?lines[0].size*0.75:0);
+  } else {
+    startY=(Hpx-totalH)/2+(lines.length>0?lines[0].size*0.75:0)+textShiftPx;
+  }
+
+  /* Helper: build one SVG text element (or scaled group) in px coords, blue fill */
+  function svgText(text, ln, xPx, yPx, maxWpx, anchor, baseline){
+    if(!text||!text.trim()) return '';
+    let fs=''; if(ln.italic)fs+='italic '; if(ln.bold)fs+='bold '; fs+=`${ln.size}px ${ln.font||'Arial'}`;
+    mCtx.font=fs;
+    const meas=mCtx.measureText(text).width||1;
+    const sx=Math.min(1, maxWpx/meas);
+    const fStyle=ln.italic?'italic':'normal', fWeight=ln.bold?'bold':'normal';
+    const attrs=`text-anchor="${anchor}" dominant-baseline="${baseline}" font-family="${escSVG(ln.font||'Arial')}" font-size="${ln.size}px" font-style="${fStyle}" font-weight="${fWeight}" fill="#0000ff"`;
+    if(sx<1){
+      return `<g transform="translate(${xPx.toFixed(2)},${yPx.toFixed(2)}) scale(${sx.toFixed(6)},1)"><text x="0" y="0" ${attrs}>${escSVG(text)}</text></g>\n`;
+    }
+    return `<text x="${xPx.toFixed(2)}" y="${yPx.toFixed(2)}" ${attrs}>${escSVG(text)}</text>\n`;
+  }
+
+  let textEls='';
+
+  /* Lines 1-3 (with wrapped sub-lines): centred horizontally, alphabetic baseline */
+  lines.forEach((ln,i)=>{
+    const sx=ln._isWrapped?1:1; // wrapped lines always fit, no compression needed
+    textEls+=svgText(ln.text, ln, Wpx/2, startY, maxWcenPx, 'middle', 'auto');
+    if(i<lines.length-1){
+      const next=lines[i+1];
+      if(i===0) startY+=gap12Px+lines[1].size;
+      else if(!next._isWrapped) startY+=gap23Px+next.size;
+      else startY+=Math.round(ln.size*0.15)+next.size;
+    }
+  });
+
+  /* Line 4/5: zones reference the top-CENTRE hole position (W/2 ± holeR),
+     regardless of which holes are actually drawn — matches canvas renderer. */
+  const holeMarg_=params.canvas.circle_top_mm, holeR_=params.canvas.circle_diameter_mm/2;
+  const holeCy_px=mmToPx(holeMarg_+holeR_);
+  const buf2px_=mmToPx(2);
+  const centreHoleLeftPx_=mmToPx(params.canvas.width_mm/2-holeR_);
+  const centreHoleRightPx_=mmToPx(params.canvas.width_mm/2+holeR_);
+  // Left zone: (label left edge + 2mm) → (centre-hole left edge - 2mm)
+  const zL4=buf2px_, zR4=centreHoleLeftPx_-buf2px_;
+  const zW4=Math.max(1,zR4-zL4), zCx4=(zL4+zR4)/2;
+  textEls+=svgText(labelObj.lines.line4?.text, labelObj.lines.line4, zCx4, holeCy_px, zW4, 'middle', 'middle');
+  // Right zone: mirror — (centre-hole right edge + 2mm) → (label right edge - 2mm)
+  const zL5=centreHoleRightPx_+buf2px_, zR5=Wpx-buf2px_;
+  const zW5=Math.max(1,zR5-zL5), zCx5=(zL5+zR5)/2;
+  textEls+=svgText(labelObj.lines.line5?.text, labelObj.lines.line5, zCx5, holeCy_px, zW5, 'middle', 'middle');
+
+  /* Line 6: bottom centre, alphabetic baseline */
+  if(labelObj.lines.line6?.text?.trim()){
+    const ln6=labelObj.lines.line6;
+    const baseY=Hpx-marginSidePx-ln6.size*0.15;
+    textEls+=svgText(ln6.text, ln6, Wpx/2, baseY, maxWcenPx, 'middle', 'auto');
+  }
+
+  /* SVG uses px viewBox matching canvas exactly; physical size in mm for correct print scale */
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="${params.canvas.width_mm}mm" height="${params.canvas.height_mm}mm"
+     viewBox="0 0 ${Wpx} ${Hpx}">
+  <!-- Label outline: red, no fill -->
+  <path d="${rectPath}" fill="none" stroke="#ff0000" stroke-width="1"/>
+  <!-- Hole outlines: green, no fill -->
+${holeSVG}
+  <!-- Text: blue -->
+${textEls}
+</svg>`;
+}
+
+async function downloadSvgZip(){
+  const data=collectData();
+  const zip=new JSZip();
+  data.labels.forEach((lbl,idx)=>{
+    const svgStr=generateLabelSVG(lbl,data);
+    const num=String(idx+1).padStart(2,'0');
+    const safe=(lbl.lines.line1.text||`label_${num}`).replace(/[^a-zA-Z0-9_\-]/g,'_').substring(0,40);
+    zip.file(`label_${num}_${safe}_x${lbl.qty}.svg`,svgStr);
+  });
+  const blob=await zip.generateAsync({type:'blob'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=getZipName(); a.click();
+}
+
+/* ── Wire up ── */
+toggleAdvancedBtn.addEventListener('click',()=>{
+  const show=advancedOptions.style.display!=='block';
+  advancedOptions.style.display=show?'block':'none';
+  toggleAdvancedBtn.textContent=show?'Hide Advanced Options':'Show Advanced Options';
+});
+
+numLabelsEl.addEventListener('change',()=>{ renderLabelInputs(); previewLabels(); });
+renderLabelInputs();
+
+/* Live preview: sliders */
+[largeSize,smallSize,line3Size,cornerSize,bottomSize,gap12,gap23,textShift]
+  .forEach(el=>el.addEventListener('input',()=>{ updateNumericLabels(); previewLabels(); }));
+updateNumericLabels();
+
+/* Live preview: checkboxes and selects in advanced options */
+[link23,linkGaps,wrapLine3,bold1,italic1,bold2,italic2,bold3,italic3,bold45,italic45,bold6,italic6,
+ ...document.querySelectorAll('input[name="hole"]')]
+  .forEach(el=>el.addEventListener('change', previewLabels));
+[font1,font2,font3,font45,font6]
+  .forEach(el=>el.addEventListener('change', previewLabels));
+document.getElementById('previewCols').addEventListener('change', previewLabels);
+
+/* Live preview: text inputs (label 1 lines + qty, with short debounce) */
+let _previewTimer=null;
+function debouncedPreview(){ clearTimeout(_previewTimer); _previewTimer=setTimeout(previewLabels,300); }
+['line1','line2','line3','line4','line5','line6'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', debouncedPreview);
+});
+qty1.addEventListener('change', previewLabels);
+
+/* Live preview: dynamically created multi-label inputs — delegate from container */
+document.getElementById('labelsContainer').addEventListener('input', debouncedPreview);
+document.getElementById('labelsContainer').addEventListener('change', previewLabels);
+
+previewBtn.addEventListener('click', previewLabels);
+downloadBtn.addEventListener('click', downloadJson);
+document.getElementById('downloadSvgBtn').addEventListener('click', downloadSvgZip);
+document.getElementById('downloadSettingsCsvBtn').addEventListener('click', downloadSettingsCSV);
+document.getElementById('downloadTemplateBtn').addEventListener('click', downloadTemplateCSV);
+</script>
+</body>
+</html>
